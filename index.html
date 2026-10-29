@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EVLab GIS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/main.css">
+</head><body>
+<header id="toolbar">
+  <strong class="brand">EVLab GIS</strong>
+  <button id="btn-new">New</button>
+  <button id="btn-add">Add data</button>
+  <button id="btn-zoom-all">Zoom to extent</button>
+  <span class="muted2">Click a feature or table row to select (Shift/Ctrl adds)</span>
+  <button disabled title="Milestone 3">Measure</button>
+  <button disabled title="Milestone 4">Analysis</button>
+  <button disabled title="Milestone 5">Save</button>
+  <button disabled title="Milestone 5">Export</button>
+  <button disabled title="Milestone 5">Print</button>
+  <input type="file" id="file-input" accept=".geojson,.json,.csv" hidden>
+</header>
+<main>
+  <aside id="left"><h3>Layers</h3><ul id="layer-tree"></ul>
+    <label class="basemap"><input type="checkbox" id="basemap-toggle"> OpenStreetMap basemap (online, optional)</label></aside>
+  <div id="map"><div id="north" title="North">N<span>▲</span></div></div>
+  <aside id="right"><h3>Symbology</h3><div id="sym"></div></aside>
+</main>
+<section id="table-panel"></section>
+<footer id="status">
+  <span id="s-coords">—</span><span id="s-crs">Project CRS: EPSG:4326</span>
+  <span id="s-scale"></span><span id="s-sel">Selected: 0</span><span id="s-msg">Ready</span>
+</footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/proj4@2.9.2/dist/proj4.js"></script>
+<script type="module" src="js/app.js"></script>
+</body></html>

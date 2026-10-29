@@ -1,0 +1,11 @@
+import { parseGeoJSON } from '../js/data/geojson-import.js';
+import assert from 'node:assert/strict';
+const pt = (x, y, p = {}) => ({ type: 'Feature', properties: p, geometry: { type: 'Point', coordinates: [x, y] } });
+let r = parseGeoJSON(JSON.stringify({ type: 'FeatureCollection', features: [pt(89.5, 22.8, { id: 'A1' })] }));
+assert(r.ok && r.geojson.features[0].properties.id === 'A1');
+r = parseGeoJSON(JSON.stringify({ type: 'FeatureCollection', features: [pt(500000, 2500000)] }));
+assert(!r.ok && /CRS/.test(r.errors[0]));
+r = parseGeoJSON(JSON.stringify({ type: 'FeatureCollection', features: [pt(89, 22), { type: 'Feature', geometry: null }] }));
+assert(r.ok && r.skipped === 1);
+assert(!parseGeoJSON('{bad').ok);
+console.log('geojson-import: all tests passed');
