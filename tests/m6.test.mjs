@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import { SCHEMAS, schemaOf, validateAssets, summarize, inventory } from '../js/civil/assets.js';
+import { chainageOnLine, addChainage } from '../js/civil/chainage.js';
+import { serializeProject, parseProject } from '../js/core/project-serializer.js';
+assert.equal(new Set(SCHEMAS.map(s => s.id)).size, SCHEMAS.length);
+SCHEMAS.forEach(s => { assert(s.fields.some(f => f.required) && new Set(s.fields.map(f => f.key)).size === s.fields.length && s.geoms.every(g => ['Point', 'LineString', 'Polygon'].includes(g))); });
+const ln = (a, b, p) => ({ type: 'Feature', properties: p, geometry: { type: 'LineString', coordinates: [[0, 0], [a, b]] } });
+const F = [ln(1, 0, { ID: 'P1', mat: 'DI', dia: 200, extra: 'keep' }), ln(0, 1, { ID: 'P1', mat: 'PVC', dia: 'x' }), { type: 'Feature', properties: { ID: null, mat: 'DI', dia: 100 }, geometry: { type: 'Point', coordinates: [0, 0] } }];
+const civil = { type: 'distribution_pipe', map: { asset_id: 'ID', material: 'mat', diameter_mm: 'dia' } }, v = validateAssets(F, civil).map(x => x.msg).join('|');
+assert(/non-numeric/.test(v) && /duplicate IDs/.test(v) && /geometry type/.test(v) && /missing values/.test(v));
+assert(validateAssets(F, { type: 'valve', map: {} }).some(x => x.level === 'error' && /Required/.test(x.msg)));
+assert(validateAssets([{ properties: { g: 10, i: 12 }, geometry: { type: 'Point', coordinates: [0, 0] } }], { type: 'manhole', map: { asset_id: 'g', ground_level_m: 'g', invert_level_m: 'i' } }).some(x => /invert level above/.test(x.msg)));
+const s = summarize(F, civil); assert.equal(s.count, 3); assert(Math.abs(s.length_m - 2 * 111194.9) < 100); assert.deepEqual(s.by_material, { DI: 2, PVC: 1 });
+const inv = inventory(F, civil); assert.deepEqual(inv.fields.slice(0, 3), ['asset_id', 'material', 'diameter_mm']); assert(inv.fields.includes('extra') && inv.fields.includes('length_m') && inv.rows[0].extra === 'keep' && inv.rows[0].asset_id === 'P1');
+const line = [[0, 0], [0.1, 0]], r = chainageOnLine(line, [0.05, 0.001]); assert(Math.abs(r.chainage - 5559.7) < 5 && Math.abs(r.offset - 111.2) < 1);
+assert(Math.abs(chainageOnLine(line, [0.2, 0]).chainage - 11119.5) < 5 && chainageOnLine(line, [-0.1, 0]).chainage === 0); // clamped to line ends
+const pts = [{ type: 'Feature', properties: { chainage_m: 'mine' }, geometry: { type: 'Point', coordinates: [0.05, 0.001] } }], ac = addChainage(pts, [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line } }]);
+assert.equal(ac.features[0].properties.chainage_m, 'mine'); assert(Math.abs(ac.features[0].properties._chainage_m - 5559.7) < 5); assert(addChainage(pts, [F[0], F[1]]).errors.length === 1);
+const L = { name: 'Pipes', visible: true, style: { mode: 'single', color: '#112233', width: 2, opacity: 1, field: null, cats: {}, edges: [], n: 4 }, civil, geojson: { type: 'FeatureCollection', features: [F[0]] } };
+const pr = parseProject(JSON.stringify(serializeProject({ name: 'c', projectCrs: 'EPSG:4326', view: null, layers: [L] }))); assert.deepEqual(pr.project.layers[0].civil, civil);
+const bad = JSON.parse(JSON.stringify(serializeProject({ name: 'c', projectCrs: 'EPSG:4326', view: null, layers: [L] }))); bad.layers[0].civil.type = 'nope'; const pb = parseProject(JSON.stringify(bad)); assert(pb.project.layers[0].civil === null && pb.warnings.length === 1);
+console.log('m6: all tests passed');

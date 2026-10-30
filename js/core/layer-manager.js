@@ -20,6 +20,7 @@ export function select(id, i, additive) {
   if (!additive) layers.forEach(l => { if (l.id !== id) l.selected.clear(); });
   const s = L(id).selected; if (additive && s.has(i)) s.delete(i); else { if (!additive) s.clear(); s.add(i); }
   activeId = id; emit(); }
+export const setSelection = (id, idxs) => { layers.forEach(l => l.selected.clear()); L(id).selected = new Set(idxs); activeId = id; emit(); };
 export const clearSelection = () => { layers.forEach(l => l.selected.clear()); emit(); };
 export const editCell = (id, i, field, v) => { L(id).geojson.features[i].properties[field] = v; emit(); };
 export const selectedCount = () => layers.reduce((n, l) => n + l.selected.size, 0);

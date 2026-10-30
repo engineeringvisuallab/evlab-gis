@@ -1,13 +1,15 @@
 const TYPES = ['Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon','GeometryCollection'];
 function coords(c, out) { if (typeof c[0] === 'number') out.push(c); else c.forEach(x => coords(x, out)); }
 /** Parses GeoJSON text. Assumes WGS84 (RFC 7946); rejects out-of-range values instead of guessing a CRS. */
-export function parseGeoJSON(text) {
+import { mapGeometry } from '../core/crs-manager.js';
+export function parseGeoJSON(text, tx) {
   let g; try { g = JSON.parse(text); } catch (e) { return { ok: false, errors: ['Invalid JSON: ' + e.message] }; }
   const feats = g.type === 'FeatureCollection' ? g.features : g.type === 'Feature' ? [g] : TYPES.includes(g.type) ? [{ type: 'Feature', properties: {}, geometry: g }] : null;
   if (!Array.isArray(feats)) return { ok: false, errors: ['Not a GeoJSON object.'] };
   const errors = [], good = [];
   feats.forEach((f, i) => {
-    const gm = f && f.geometry;
+    let gm = f && f.geometry;
+    if (tx && gm && TYPES.includes(gm.type)) { try { gm = mapGeometry(gm, tx); } catch (e) { return errors.push(`Feature ${i}: reprojection failed`); } }
     if (!gm || !TYPES.includes(gm.type)) return errors.push(`Feature ${i}: missing or unsupported geometry`);
     const pts = []; if (gm.type !== 'GeometryCollection') coords(gm.coordinates, pts);
     if (gm.type !== 'GeometryCollection' && !pts.length) return errors.push(`Feature ${i}: empty coordinates`);

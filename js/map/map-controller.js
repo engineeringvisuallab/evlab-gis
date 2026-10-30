@@ -1,8 +1,11 @@
 import { layers, select, clearSelection } from '../core/layer-manager.js';
 import { styleFor } from '../layers/styling.js';
 let map, group, osm; const byId = new Map();
+export const getMap = () => map;
+export const getView = () => ({ center: [map.getCenter().lat, map.getCenter().lng], zoom: map.getZoom() });
+export const setView = v => map.setView(v.center, v.zoom);
 export function initMap(onMouse, onScale) {
-  map = L.map('map', { center: [23.8, 90.4], zoom: 7 });
+  map = L.map('map', { center: [23.8, 90.4], zoom: 7, preferCanvas: true });
   L.control.scale({ metric: true, imperial: false }).addTo(map);
   group = L.layerGroup().addTo(map);
   map.on('mousemove', e => onMouse(e.latlng)); map.on('click', clearSelection);

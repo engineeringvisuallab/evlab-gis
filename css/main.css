@@ -18,3 +18,10 @@ aside{width:240px;padding:8px;overflow:auto;background:#f4f6f8}
 #table-panel th{background:#eef;cursor:pointer;position:sticky;top:0}#table-panel tr.sel td{background:#ffe0e0}
 #layer-tree li.active{background:#dce8f7}.muted2{font-size:12px;opacity:.8}.legend i{display:inline-block;width:12px;height:12px;margin-right:6px}
 #sym label{display:block;margin:6px 0}
+#print-title,#print-legend{display:none}
+@media print{#toolbar,aside,#table-panel,#status,#north,.leaflet-control-zoom{display:none!important}
+ main{display:block}#map{height:90vh;width:100%}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ #print-title{display:block;position:absolute;top:8px;left:12px;z-index:1000;background:#fff;padding:2px 8px;font:bold 20px sans-serif}
+ #print-legend{display:block;position:absolute;bottom:30px;left:12px;z-index:1000;background:#fff;padding:4px 8px;font-size:12px}
+ #print-legend i{display:inline-block;width:12px;height:12px;margin-right:6px}}
+#civil select{max-width:100%}#civil pre{white-space:pre-wrap;font-size:12px}

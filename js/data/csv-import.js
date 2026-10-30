@@ -16,7 +16,7 @@ export function detectCoordColumns(h) {
   return a && b ? { lat: a.trim(), lon: b.trim() } : null;
 }
 /** Lat/lon in WGS84 degrees. Invalid rows are skipped and reported; all columns are kept as attributes. */
-export function csvToGeoJSON(rows, latF, lonF) {
+export function csvToGeoJSON(rows, latF, lonF, tx) { // latF = Y/lat column, lonF = X/lon column; tx converts source CRS -> WGS84
   const h = rows[0].map(x => x.trim()), li = h.indexOf(latF), oi = h.indexOf(lonF);
   if (li < 0 || oi < 0) return { ok: false, errors: ['Coordinate column not found in header.'] };
   const body = rows.slice(1), cell = (r, c) => (r[c] ?? '').trim();
@@ -25,8 +25,9 @@ export function csvToGeoJSON(rows, latF, lonF) {
   const errors = [], features = [];
   body.forEach((r, k) => { const row = k + 2;
     if (r.length !== h.length) return errors.push(`Row ${row}: expected ${h.length} columns, found ${r.length}`);
-    const lat = Number(cell(r, li)), lon = Number(cell(r, oi));
+    let lat = Number(cell(r, li)), lon = Number(cell(r, oi));
     if (cell(r, li) === '' || cell(r, oi) === '' || !isFinite(lat) || !isFinite(lon)) return errors.push(`Row ${row}: missing or non-numeric coordinates`);
+    if (tx) { try { [lon, lat] = tx([lon, lat]); } catch { lat = NaN; } if (!isFinite(lat) || !isFinite(lon)) return errors.push(`Row ${row}: transformation failed`); }
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return errors.push(`Row ${row}: coordinates outside lon/lat range (projected X/Y needs a CRS, Milestone 3)`);
     const properties = {}; h.forEach((n, c) => { const v = cell(r, c); properties[n] = num[c] ? (v === '' ? null : Number(v)) : r[c]; });
     features.push({ type: 'Feature', properties, geometry: { type: 'Point', coordinates: [lon, lat] } }); });

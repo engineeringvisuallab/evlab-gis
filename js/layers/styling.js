@@ -32,3 +32,7 @@ export function styleFor(l, f, sel) {
   return sel ? { color: '#d50000', fillColor: c, weight: s.width + 2, opacity: 1, fillOpacity: .7 * s.opacity }
              : { color: c, fillColor: c, weight: s.width, opacity: s.opacity, fillOpacity: .4 * s.opacity };
 }
+export function legendEntries(l) { const s = l.style;
+  if (s.mode === 'categorized') return Object.entries(s.cats).map(([v, c]) => ({ color: c, label: `${s.field}: ${v}` }));
+  if (s.mode === 'graduated' && s.edges?.length) { const n = s.edges.length - 1; return rampColors(n).map((c, i) => ({ color: c, label: `${s.field}: ${s.edges[i].toFixed(2)} - ${s.edges[i + 1].toFixed(2)}` })); }
+  return [{ color: s.color, label: l.name }]; }
