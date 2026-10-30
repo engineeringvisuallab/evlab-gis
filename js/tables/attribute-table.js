@@ -10,13 +10,15 @@ export function renderTable(el, l, hooks) {
   if (st.sort) idx.sort((a, b) => { const x = feats[a].properties[st.sort], y = feats[b].properties[st.sort];
     return (x == null) - (y == null) || (types[st.sort] === 'number' ? x - y : String(x).localeCompare(String(y))) * st.dir; });
   const bar = document.createElement('div');
-  bar.innerHTML = `<b></b> <input placeholder="Search (Enter)"> <button id="zs">Zoom to selected</button> <button id="ex">Export selected CSV</button> <span></span>`;
+  bar.innerHTML = `<b></b> <input placeholder="Search (Enter)"> <button id="zs">Zoom to selected</button> <button id="ex">Export selected CSV</button> <button id="af">Add field</button> <button id="df">Delete field</button> <span></span>`;
   bar.querySelector('b').textContent = `${l.name}: ${idx.length}/${feats.length} records, ${l.selected.size} selected`;
   const inp = bar.querySelector('input'); inp.value = st.search; inp.onchange = () => { st.search = inp.value; renderTable(el, l, hooks); };
   bar.querySelector('#zs').onclick = () => l.selected.size ? hooks.zoomSel(l.id) : hooks.msg('No selected features', true);
   bar.querySelector('#ex').onclick = () => l.selected.size
     ? hooks.download(`${l.name}_selected.csv`, toCSV(fields, [...l.selected].sort((a, b) => a - b).map(i => feats[i].properties))) : hooks.msg('No selected features', true);
   if (idx.length > MAX) bar.lastElementChild.textContent = `Showing first ${MAX} rows; use search to narrow`;
+  bar.querySelector('#af').onclick = () => { const n = prompt('New field name'); if (!n) return; const t = prompt('Type: text or number', 'text'); if (t !== 'text' && t !== 'number') return hooks.msg('Type must be text or number', true); const e = LM.addField(l.id, n, t); if (e) hooks.msg(e, true); };
+  bar.querySelector('#df').onclick = () => { const n = prompt('Field to delete (all its values are removed)'); if (!n) return; if (!fields.includes(n)) return hooks.msg(`No field ${n}`, true); if (confirm(`Delete field "${n}" and all its values?`)) LM.deleteField(l.id, n); };
   el.appendChild(bar);
   const tb = document.createElement('table'), hr = tb.insertRow();
   fields.forEach(f => { const th = document.createElement('th'); th.textContent = `${f} (${types[f]})${st.sort === f ? (st.dir > 0 ? ' ▲' : ' ▼') : ''}`;

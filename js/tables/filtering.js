@@ -10,3 +10,8 @@ export function filterIndices(F, field, op, value) {
       case '<': return v < n; case '<=': return v <= n; case '>': return v > n; case '>=': return v >= n;
       case 'contains': return String(v).toLowerCase().includes(value.toLowerCase()); default: return false; } };
   const indices = []; F.forEach((f, i) => { if (test(f.properties?.[field])) indices.push(i); }); return { indices }; }
+/** Combines conditions with AND/OR. An error in any condition returns { indices: [], error }. */
+export function filterMulti(F, filter) { if (!filter) return { indices: F.map((_, i) => i) }; let acc = null;
+  for (const c of filter.conds) { const r = filterIndices(F, c.field, c.op, c.value); if (r.error) return { indices: [], error: r.error }; const s = new Set(r.indices);
+    acc = acc === null ? s : filter.join === 'OR' ? new Set([...acc, ...s]) : new Set([...acc].filter(i => s.has(i))); }
+  return { indices: [...(acc || [])].sort((a, b) => a - b) }; }

@@ -10,20 +10,22 @@
   <button id="btn-new">New</button>
   <button id="btn-add">Add data</button>
   <button id="btn-zoom-all">Zoom to extent</button>
-  <span class="muted2">Click a feature or table row to select (Shift/Ctrl adds)</span>
+  <button id="btn-id">Identify</button><span class="muted2">Click a feature or table row to select (Shift/Ctrl adds)</span>
   <button id="btn-dist">Measure distance</button><button id="btn-area">Measure area</button><button id="btn-val">Validate</button>
   <button id="btn-ana">Analysis</button>
   <button id="btn-save">Save project</button><button id="btn-open">Open project</button>
   <select id="exp"><option value="">Export...</option><option value="geojson">Layer as GeoJSON</option><option value="csv">Layer as CSV</option><option value="kml">Layer as KML</option><option value="png">Map as PNG</option></select>
   <button id="btn-print">Print map</button>
   <input type="file" id="proj-input" accept=".json" hidden>
-  <input type="file" id="file-input" accept=".geojson,.json,.csv,.asc" hidden>
+  <input type="file" id="file-input" accept=".geojson,.json,.csv,.asc,.kml,.gpx" hidden>
 </header>
 <main>
   <aside id="left"><h3>Layers</h3><ul id="layer-tree"></ul>
-    <label class="basemap"><input type="checkbox" id="basemap-toggle"> OpenStreetMap basemap (online, optional)</label></aside>
+    <label class="basemap"><input type="checkbox" id="basemap-toggle"> OpenStreetMap basemap (online, optional)</label>
+    <details class="basemap"><summary>Custom XYZ basemap</summary><input id="xyz-url" placeholder="https://tiles.example.com/{z}/{x}/{y}.png"><input id="xyz-attr" placeholder="Attribution (required)"><button id="xyz-apply">Apply</button><button id="xyz-clear">Remove</button>
+      <p class="muted">You are responsible for the provider's terms, rate limits and API keys. Not saved in project files.</p></details></aside>
   <div id="map"><div id="print-title"></div><div id="print-legend"></div><div id="north" title="North">N<span>▲</span></div></div>
-  <aside id="right"><h3>Symbology</h3><div id="sym"></div><h3>Coordinate systems</h3><div id="crs"></div><h3>Analysis</h3><div id="ana"></div><h3>Civil Engineering</h3><div id="civil"></div><h3>Raster / terrain</h3><div id="rast"></div></aside>
+  <aside id="right"><h3>Symbology</h3><div id="sym"></div><h3>Coordinate systems</h3><div id="crs"></div><h3>Labels and filter</h3><div id="lab"></div><h3>Analysis</h3><div id="ana"></div><h3>Civil Engineering</h3><div id="civil"></div><h3>Raster / terrain</h3><div id="rast"></div></aside>
 </main>
 <section id="table-panel"></section>
 <footer id="status">

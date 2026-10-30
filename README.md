@@ -1,45 +1,51 @@
-# EVLab GIS (Milestone 1)
-Browser-based GIS by Engineering Visual Lab. Static site: no build, no backend, no API key.
+# EVLab GIS
+Free, browser-based GIS by Engineering Visual Lab (EVLab). *Engineering • Innovation • Learning*
+Static site (HTML, CSS, JavaScript ES modules, Leaflet, Proj4js, Turf.js). No build step, no backend, no account, no API key for local data.
 
-Run locally: `cd evlab-gis && python3 -m http.server 8000`, open http://localhost:8000 (ES modules need http, not file://).
-Tests: `node tests/run-all.mjs` (crs test needs `npm i proj4@2.9.2`, otherwise it reports SKIPPED)
+Suggested URL: https://engineeringvisuallab.github.io/evlab-gis/
 
-CRS: only EPSG:4326, 3857, 32645, 32646 are built in. Other codes need a user-supplied proj4 definition, which EVLab GIS does not verify. Imported projected data is stored in WGS84; original X/Y stay as CSV attributes. Datum shifts are not verified.
+## Run locally
+`python3 -m http.server 8000` in this folder, then open http://localhost:8000 (ES modules do not load from file://).
 
-Dependencies (pinned, loaded from unpkg CDN; vendor into lib/ and add SRI hashes before production):
-Leaflet 1.9.4 (BSD-2-Clause), Proj4js 2.9.2 (MIT), Turf.js 6.5.0 (MIT; API differs from 7.x). Turf.js arrives in Milestone 4.
-Basemap (optional, off by default): OpenStreetMap tiles, internet required, attribution required, subject to the OSM tile usage policy.
+## Deploy to GitHub Pages
+1. Create the repository `evlab-gis`, push this folder to `main`.
+2. Settings > Pages > Source: **GitHub Actions** (uses `.github/workflows/pages.yml`, which runs the tests first), or choose "Deploy from a branch", `main`, `/ (root)`.
+3. All paths are relative and `.nojekyll` is present, so subdirectory hosting works (checked statically by `tests/static.test.mjs`; not yet verified on a live Pages site).
+4. Optional: run `scripts/vendor-deps.sh` to copy the pinned libraries into `lib/` and point `index.html` at them, so the app does not depend on unpkg.
 
-| Feature | Status |
-|---|---|
-| Layout, map, scale, coordinates, north indicator, status bar | Implemented |
-| Layer tree: visibility, order, rename, remove, zoom-to-layer | Implemented |
-| GeoJSON and CSV (lat/lon) import, validated, WGS84 only | Partial |
-| Single/categorized/graduated styling (equal interval), legend | Implemented (one colour for fill and outline) |
-| Click and table selection, attribute table (search, sort, edit, zoom, CSV export) | Implemented, edits in memory only |
-| Identify popup, add/delete fields, filter builder, labels | Planned |
-| Project CRS selector, per-layer source CRS, import reprojection (GeoJSON and CSV X/Y) to WGS84 | Implemented, untested in browser (needs proj4) |
-| Distance/area measurement (spherical approximation, ~0.5%) | Implemented |
-| Geometry validation (rings, self-crossing, short lines, non-finite) | Implemented (touching/collinear overlaps not detected) |
-| Buffer, centroid, bbox, dissolve, intersect, difference, union, nearest point, select by location/attribute | Implemented via Turf.js 6.5.0 (MIT); logic tested with stubs, real Turf untested here |
-| Web Worker offloading | Planned; operations currently run on the main thread with a size warning |
-| Versioned JSON project save/open (data embedded, style, order, visibility, project CRS, map view; labels/filters reserved) | Implemented |
-| Export layer as GeoJSON, CSV (points get lon/lat), KML (no styling) | Implemented |
-| Export map as PNG (vector layers only, no basemap) and print layout (title, legend, scale bar, north arrow) | Implemented, browser-only, untested here |
-| Civil module: asset schemas (supply zone, DMA, reservoir, pumping station, mains, pipes, valve, junction, manhole, road, crossing, survey point), field mapping, checks, summaries, inventory CSV, style by diameter/material, chainage from a single alignment | Implemented, saved in project files |
-| ESRI ASCII grid (.asc) import, WGS84 degrees only, user must confirm CRS and units; elevation display, hillshade, slope, aspect, statistics, elevation sampling, terrain profile CSV (Web Worker with main-thread fallback) | Implemented, browser parts untested here |
-| Raster not embedded in project files (name/file recorded, re-add on open) | By design |
-| GeoTIFF, raster reprojection, contours, raster clipping | Planned |
-| KML, GPX, Shapefile ZIP, GeoPackage import | Not implemented; selecting them shows a clear message |
+## Feature matrix
+| Area | Implemented | Partial | Planned / not implemented |
+|---|---|---|---|
+| Workspace | Toolbar, layer panel, map, scale, cursor coordinates, north indicator, status bar | Properties panel is split into symbology, CRS, analysis, civil, raster sections | Feature info panel (identify popup is available) |
+| Import | GeoJSON, CSV (comma, lat/lon or projected X/Y with CRS), KML, GPX, ESRI ASCII grid | KML: geometry and attributes only (no styles, KMZ, NetworkLink); CSV: comma delimiter only | Shapefile ZIP, GeoPackage, GeoTIFF (clear message shown) |
+| Layers | Visibility, order, rename, remove, zoom to layer, per-layer opacity (via style), selection, duplicate layer, groups (collapse, show/hide, saved in projects) | | |
+| Symbology | Single, categorized, graduated (equal interval, quantile, natural breaks from data; Jenks samples at most 1000 values), colour, width, point size, opacity, legend, labels (field, size, colour; layers with up to 500 visible features) | One colour for polygon fill and outline; labels are drawn on screen and in print but not in the PNG export | More class methods (standard deviation, manual breaks) |
+| Attribute table | Types, search, sorting, row selection, edit cells, zoom to selected, export selected CSV, add/delete fields, multi-condition (AND/OR) display filter, identify popup | Edits are in memory until the project is saved | OR-groups nested inside AND (filters are a flat AND or OR list) |
+| CRS | WGS84, UTM 45N/46N, Web Mercator, user-supplied proj4 definitions, project CRS readout, import reprojection | Layers are stored in WGS84; datum shifts not verified | Per-layer re-export in another CRS, Bangladesh preset list |
+| Measurement | Geodesic-style distance and area (spherical, ~0.5%) | | Ellipsoidal precision |
+| Analysis | Buffer, centroid, bbox, dissolve, intersect, difference, union, nearest point, select by location/attribute, geometry validation | Turf-based tools tested only with stubs here | Web Worker offloading for vector tools |
+| Raster | ASCII grid display, hillshade, slope, aspect, statistics, elevation sampling, profile CSV (worker) | WGS84 degree grids only | GeoTIFF, reprojection, contours, clipping |
+| Civil | Asset schemas, field mapping, checks, summaries, inventory CSV, chainage | | CAD / Civil 3D / WaterGEMS / EVLab Infra connectors |
+| Project and export | JSON project save/open, GeoJSON, CSV, KML, PNG (vector only), print layout | Rasters are not embedded in projects | |
+| Basemaps | OSM toggle, custom XYZ URL with attribution | Not saved in projects | |
 
-## Analysis assumptions
-Stored geometry is WGS84 lon/lat. Overlay, dissolve, centroid and bbox are topological/planar on degrees; do not read areas or lengths from them as ground values (use the geodesic measure tool). Buffer distances are metres via Turf's local projection. Nearest uses spherical distance. Overlay inputs must be valid polygons; invalid features are skipped and reported.
+## Data integrity rules
+Invalid records are skipped and counted, never silently dropped; attributes are preserved; a missing CRS is asked for, not guessed; layers are stored in WGS84 after reprojection, and imported projected CSV X/Y stay as attributes. Planar overlay results on lon/lat must not be used for ground areas; use the measure tool or the civil summaries.
+
+## Basemaps and terms
+Basemaps are optional and need internet. OpenStreetMap tiles require attribution and are subject to the OSM tile usage policy (no heavy use, no bulk download). Custom XYZ services: you must follow the provider's terms, rate limits and API-key rules. Tiles are never downloaded or redistributed by this app, and the PNG export excludes them.
 
 ## Project file
-`*.evlab.json`, format `evlab-gis-project`, version 1. Layer data is embedded (WGS84 GeoJSON) so there are no external file references; large projects produce large files (confirmation above 25 MB). User-defined CRS definitions are stored and restored as unverified. Invalid features or unknown styles are reported on open, never silently dropped.
+`*.evlab.json`, format `evlab-gis-project`, version 1: project name, CRS, map view, per-layer data (embedded WGS84 GeoJSON), style, visibility, order, source CRS, civil mapping. Labels and the display filter are saved. Raster layers are recorded by name only and must be re-added.
+
+## Performance
+Vector layers draw on canvas; above 20,000 features a confirmation appears, and selection changes redraw everything, so very large layers stay slow. Grids up to 16 million cells are accepted (confirmation above 4 million). Slope and hillshade run in a Web Worker with a main-thread fallback; vector analysis runs on the main thread with a size warning.
 
 ## Civil module
-Schemas define standard field names only; no project data is created. You map your own columns onto them. The map does not perform hydraulic analysis. Lengths and areas are spherical approximations (~0.5%). Chainage uses the nearest point on one alignment line (local planar search, spherical distances) and writes a new layer. Integration with CAD, Civil 3D, WaterGEMS and EVLab Infra is planned via the CSV inventory and GeoJSON exports; no direct connectors exist yet.
+Standard field schemas only; you map your own columns. The map does not perform hydraulic analysis. Lengths and areas are spherical approximations. Chainage uses one alignment line.
 
-## Raster and performance limits
-Grids up to 16 million cells are accepted (a confirmation appears above 4 million); each grid is held in memory as Float32 and drawn to a canvas the size of the grid. Slope and hillshade use Horn's method with metre cell sizes derived from latitude, assume cell values are metres, and leave the outer ring of cells empty. Vector layers draw on a canvas renderer; layers above 20,000 features ask for confirmation, and every selection change redraws all features, so very large layers remain slow. `node tests/run-all.mjs` runs every test file plus static import/id/path checks that mimic GitHub Pages subdirectory hosting.
+## Tests
+`node tests/run-all.mjs` (details in `tests/README.md`). To enable the skipped CRS and Turf tests: `npm i --no-save proj4@2.9.2 @turf/turf@6.5.0`.
+
+## Licence
+Source code: MIT (see `LICENSE`; change it if your organisation prefers another licence). Third-party libraries: see `THIRD_PARTY_LICENSES.md`.

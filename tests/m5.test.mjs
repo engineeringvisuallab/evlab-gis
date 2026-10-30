@@ -8,7 +8,7 @@ import { legendEntries } from '../js/layers/styling.js';
 import { parseGeoJSON } from '../js/data/geojson-import.js';
 import { parseCSV, csvToGeoJSON } from '../js/data/csv-import.js';
 const pt = (x, y, p) => ({ type: 'Feature', properties: p, geometry: { type: 'Point', coordinates: [x, y] } });
-const st = (o = {}) => ({ mode: 'single', color: '#1565c0', width: 2, opacity: 1, field: null, cats: {}, edges: [], n: 4, ...o });
+const st = (o = {}) => ({ mode: 'single', color: '#1565c0', width: 2, radius: 5, method: 'equal', opacity: 1, field: null, cats: {}, edges: [], n: 4, ...o });
 const L1 = { name: 'Pipes', visible: false, sourceCrs: 'EPSG:32646', fileName: 'pipes.csv', style: st({ mode: 'graduated', field: 'dia', edges: [100, 150, 200], n: 2 }), geojson: { type: 'FeatureCollection', features: [pt(90.1, 23.1, { id: '007', dia: 100 }), pt(90.2, 23.2, { id: '008', dia: 200 })] } };
 const L2 = { name: 'Zones', visible: true, style: st({ mode: 'categorized', field: 'z', cats: { A: '#112233' } }), geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { z: 'A' }, geometry: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } }] } };
 const r = parseProject(JSON.stringify(serializeProject({ name: 'T', projectCrs: 'EPSG:32646', view: { center: [23, 90], zoom: 9 }, layers: [L1, L2] })));

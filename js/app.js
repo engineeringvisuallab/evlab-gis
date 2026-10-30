@@ -6,7 +6,7 @@ import { bufferLayer } from './analysis/buffer.js';
 import { intersectLayers, differenceLayers, unionLayers } from './analysis/overlay.js';
 import { dissolveLayer } from './analysis/dissolve.js';
 import { selectByLocation, nearestPoints, bboxPolygons, centroidLayer } from './analysis/spatial-query.js';
-import { filterIndices } from './tables/filtering.js';
+import { filterIndices, filterMulti } from './tables/filtering.js';
 import { project } from './core/project.js';
 import { serializeProject, parseProject } from './core/project-serializer.js';
 import { toGeoJSON } from './io/geojson-export.js';
@@ -19,6 +19,9 @@ import { addChainage } from './civil/chainage.js';
 import * as R from './layers/raster-layer.js';
 import { parseASC, looksGeographic } from './raster/asc-import.js';
 import { sample, profile } from './raster/terrain.js';
+import { parseKML } from './data/kml-import.js';
+import { parseGPX } from './data/gpx-import.js';
+import * as BM from './map/basemap-manager.js';
 import * as MEAS from './map/measurements.js';
 import * as LM from './core/layer-manager.js';
 import { parseGeoJSON } from './data/geojson-import.js';
@@ -32,12 +35,14 @@ CRS.registerAll();
 MC.initMap(showCoords, t => $('s-scale').textContent = t);
 function renderTree() {
   const ul = $('layer-tree'); ul.innerHTML = '';
-  LM.layers.forEach(l => { const li = document.createElement('li'); if (l.id === LM.activeId) li.className = 'active';
-    li.innerHTML = '<input type="checkbox"><span class="name"></span><button>↑</button><button>↓</button><button>⌖</button><button>✎</button><button>✕</button>';
-    const [cb, nm, up, dn, zm, rn, rm] = li.children; nm.textContent = `${l.name} (${l.geojson.features.length})`;
+  let prevGroup = null;
+  LM.layers.forEach(l => { if ((l.group || null) !== prevGroup) { prevGroup = l.group || null; if (prevGroup) ul.appendChild(groupRow(prevGroup)); } if (l.group && collapsedGroups.has(l.group)) return;
+    const li = document.createElement('li'); if (l.id === LM.activeId) li.className = 'active';
+    li.innerHTML = '<input type="checkbox"><span class="name"></span><button>↑</button><button>↓</button><button>⌖</button><button>✎</button><button>✕</button><button title="Duplicate layer">⧉</button><button title="Group">▤</button>';
+    const [cb, nm, up, dn, zm, rn, rm, dup, grp] = li.children; nm.textContent = `${l.name} (${l.geojson.features.length})`;
     nm.title = `Source CRS: ${l.sourceCrs || l.crs}; stored as WGS84`; nm.onclick = () => LM.setActive(l.id); cb.checked = l.visible; cb.onchange = () => LM.setVisible(l.id, cb.checked);
     up.onclick = () => LM.move(l.id, -1); dn.onclick = () => LM.move(l.id, 1); zm.onclick = () => MC.zoomToLayer(l.id);
-    rn.onclick = () => { const n = prompt('Layer name', l.name); if (n) LM.renameLayer(l.id, n); }; rm.onclick = () => LM.removeLayer(l.id);
+    rn.onclick = () => { const n = prompt('Layer name', l.name); if (n) LM.renameLayer(l.id, n); }; rm.onclick = () => LM.removeLayer(l.id); dup.onclick = () => LM.duplicateLayer(l.id); grp.onclick = () => { const n = prompt('Group name (empty removes the layer from its group)', l.group || ''); if (n !== null) LM.setGroup(l.id, n); };
     ul.appendChild(li); });
 }
 function renderSym() {
@@ -46,17 +51,17 @@ function renderSym() {
   const opts = a => a.map(f => `<option${f === s.field ? ' selected' : ''}>${f}</option>`).join('');
   el.innerHTML = `<label>Mode <select id="m"><option value="single">Single</option><option value="categorized">Categorized</option><option value="graduated">Graduated</option></select></label>` +
     (s.mode === 'single' ? `<label>Color <input type="color" id="c" value="${s.color}"></label>` : `<label>Field <select id="f">${opts(s.mode === 'graduated' ? nf : fl)}</select></label>`) +
-    (s.mode === 'graduated' ? `<label>Classes <input type="number" id="n" min="2" max="5" value="${s.n}"></label>` : '') +
-    `<label>Line width <input type="number" id="w" min="1" max="10" value="${s.width}"></label><label>Opacity <input type="range" id="o" min="0.1" max="1" step="0.1" value="${s.opacity}"></label><div class="legend" id="lg"></div>`;
-  $('m').value = s.mode;
+    (s.mode === 'graduated' ? `<label>Classes <input type="number" id="n" min="2" max="5" value="${s.n}"></label><label>Method <select id="gm"><option value="equal">Equal interval</option><option value="quantile">Quantile</option><option value="jenks">Natural breaks (Jenks)</option></select></label>` : '') +
+    `<label>Line width <input type="number" id="w" min="1" max="10" value="${s.width}"></label><label>Point size <input type="number" id="r" min="2" max="20" value="${s.radius || 5}"></label><label>Opacity <input type="range" id="o" min="0.1" max="1" step="0.1" value="${s.opacity}"></label><div class="legend" id="lg"></div>`;
+  $('m').value = s.mode; if ($('gm')) { $('gm').value = s.method || 'equal'; $('gm').onchange = e => { s.method = e.target.value; apply(); }; }
   const apply = () => { if (s.mode === 'categorized' && s.field) s.cats = categorizedMap(l.geojson.features, s.field);
-    if (s.mode === 'graduated' && s.field) s.edges = breaks(l.geojson.features, s.field, s.n) || []; bus.emit('layers'); };
+    if (s.mode === 'graduated' && s.field) s.edges = breaks(l.geojson.features, s.field, s.n, s.method) || []; bus.emit('layers'); };
   $('m').onchange = e => { s.mode = e.target.value; s.field = null; if (s.mode !== 'single') s.field = (s.mode === 'graduated' ? nf : fl)[0] || null;
     if (s.mode !== 'single' && !s.field) { msg('No suitable field for this mode', true); s.mode = 'single'; } apply(); };
   if ($('c')) $('c').oninput = e => { s.color = e.target.value; bus.emit('layers'); };
   if ($('f')) $('f').onchange = e => { s.field = e.target.value; apply(); };
   if ($('n')) $('n').onchange = e => { s.n = +e.target.value; apply(); };
-  $('w').onchange = e => { s.width = +e.target.value; bus.emit('layers'); }; $('o').onchange = e => { s.opacity = +e.target.value; bus.emit('layers'); };
+  $('w').onchange = e => { s.width = +e.target.value; bus.emit('layers'); }; $('r').onchange = e => { s.radius = Math.min(20, Math.max(2, +e.target.value || 5)); bus.emit('layers'); }; $('o').onchange = e => { s.opacity = +e.target.value; bus.emit('layers'); };
   const lg = $('lg'), row = (c, t) => { const d = document.createElement('div'); d.innerHTML = '<i></i><span></span>'; d.firstChild.style.background = c; d.lastChild.textContent = t; lg.appendChild(d); };
   if (s.mode === 'categorized') Object.entries(s.cats).forEach(([v, c]) => row(c, v));
   if (s.mode === 'graduated' && s.edges.length) rampColors(s.edges.length - 1).forEach((c, i) => row(c, `${s.edges[i].toFixed(2)} – ${s.edges[i + 1].toFixed(2)}`));
@@ -72,7 +77,7 @@ $('file-input').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   if (f.size > CONFIG.maxFileMB * 1048576 && !confirm(`${f.name} is large (${(f.size / 1048576).toFixed(1)} MB). Continue?`)) return;
   if (/\.asc$/i.test(f.name)) return importAsc(f);
-  if (/\.(kml|kmz|gpx|zip|shp|gpkg|tif|tiff)$/i.test(f.name)) return msg(`${f.name.split('.').pop().toUpperCase()} import is not implemented yet. Supported: GeoJSON, CSV, ESRI ASCII grid (.asc)`, true);
+  if (/\.(kmz|zip|shp|gpkg|tif|tiff)$/i.test(f.name)) return msg(`${f.name.split('.').pop().toUpperCase()} import is not implemented yet. Supported: GeoJSON, CSV, KML, GPX, ESRI ASCII grid (.asc)`, true);
   const text = await f.text(); let r, srcCrs = 'EPSG:4326';
   const askCrs = why => { const c = CRS.normalize(prompt(why + '\nSource CRS EPSG code (e.g. 4326, 32646)? Cancel to abort.') || ''); if (!c) return null;
     if (!CRS.info(c)) { const d = prompt(c + ' is not built in. Paste its proj4 definition (you must verify it), or cancel:'); if (!d) return null;
@@ -83,6 +88,8 @@ $('file-input').onchange = async e => {
     if (!c) { const y = prompt('Y / latitude column name?'), x = y && prompt('X / longitude column name?'); if (!x) return msg('Import cancelled: coordinate columns required', true);
       c = { lat: y.trim(), lon: x.trim() }; const s = askCrs('Which CRS are the X/Y values in? (4326 if lon/lat degrees)'); if (!s) return msg('Import cancelled: CRS required', true); tx = s.tx; srcCrs = s.code; }
     r = csvToGeoJSON(rows, c.lat, c.lon, tx); }
+  else if (/\.kml$/i.test(f.name)) r = parseKML(text);
+  else if (/\.gpx$/i.test(f.name)) r = parseGPX(text);
   else { r = parseGeoJSON(text); if (!r.ok && /CRS/.test(r.errors[0])) { const s = askCrs(r.errors[0]); if (s) { r = parseGeoJSON(text, s.tx); srcCrs = s.code; } } }
   if (!r.ok) return msg(`Import failed: ${r.errors[0]}`, true);
   if (r.geojson.features.length > 20000 && !confirm(`${r.geojson.features.length} features: drawing and selection may be slow. Continue?`)) return;
@@ -171,7 +178,7 @@ $('proj-input').onchange = async e => { const f = e.target.files[0]; e.target.va
   for (const [c, d] of Object.entries(p.crsDefinitions)) { try { CRS.register(c, d); w.push(`${c} restored from the project's own definition (unverified)`); } catch { w.push(`CRS ${c}: invalid definition`); } }
   if (!CRS.info(p.projectCrs)) { w.push(`Project CRS ${p.projectCrs} unknown; using EPSG:4326`); p.projectCrs = 'EPSG:4326'; }
   p.rasters.forEach(x => w.push(`Raster "${x.name}" (${x.fileName || 'unknown file'}) is not embedded; add it again`)); LM.clear(); project.name = p.name; CRS.projectCrs.code = p.projectCrs; $('s-crs').textContent = `Project CRS: ${p.projectCrs}`;
-  [...p.layers].reverse().forEach(d => { const l = LM.addLayer(d.name, d.geojson); Object.assign(l, { visible: d.visible, sourceCrs: d.sourceCrs, fileName: d.fileName, civil: d.civil }); Object.assign(l.style, d.style); });
+  [...p.layers].reverse().forEach(d => { const l = LM.addLayer(d.name, d.geojson); Object.assign(l, { visible: d.visible, sourceCrs: d.sourceCrs, fileName: d.fileName, civil: d.civil, labels: d.labels, filter: d.filter, group: d.group }); Object.assign(l.style, d.style); });
   if (LM.layers.length) LM.setActive(LM.layers[0].id); renderCrs(); p.map ? MC.setView(p.map) : MC.zoomToAll();
   msg(`Opened "${p.name}": ${p.layers.length} layers` + (w.length ? `; ${w.length} warnings (first: ${w[0]})` : ''), w.length > 0); };
 $('exp').onchange = e => { const v = e.target.value; e.target.value = ''; const l = LM.getActive(); if (v !== 'png' && !l) return msg('No active layer', true);
@@ -242,3 +249,33 @@ function renderRast() {
 renderRast();
 MC.getMap().on('click', e => { if (!sampling) return; const x = R.rasters.find(r => r.id === rastActive); if (!x) return; const z = sample(x.grid, e.latlng.lng, e.latlng.lat);
   msg(z === null ? 'No raster data at this point' : `Elevation ${z.toFixed(2)} m at ${e.latlng.lng.toFixed(5)}, ${e.latlng.lat.toFixed(5)} (nearest cell)`, z === null); });
+$('xyz-apply').onclick = () => { const e = BM.validateXYZ($('xyz-url').value, $('xyz-attr').value); if (e.length) return msg(e[0], true);
+  $('basemap-toggle').checked = false; MC.setBasemap(false); BM.setCustom($('xyz-url').value, $('xyz-attr').value); msg('Custom basemap added (needs internet; check the provider terms and rate limits)'); };
+$('xyz-clear').onclick = () => { BM.clearCustom(); msg('Custom basemap removed'); };
+$('basemap-toggle').addEventListener('change', e => { if (e.target.checked) BM.clearCustom(); });
+$('btn-id').onclick = () => { const on = !MC.identify; MC.setIdentify(on); $('btn-id').style.background = on ? '#ffd54f' : ''; msg(on ? 'Identify on: click a feature to see its attributes' : 'Identify off'); };
+let labForm = { field: '', op: '=', value: '' };
+function renderLab() {
+  const l = LM.getActive(), el = $('lab'); el.textContent = ''; if (!l) { el.textContent = 'No active layer'; return; } const fields = Object.keys(fieldTypes(l.geojson.features));
+  const add = (t, n) => { const lb = document.createElement('label'); lb.append(t + ' ', n); el.appendChild(lb); return n; };
+  const sel = (items, val, fn) => { const s = document.createElement('select'); items.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); }); s.value = val; s.onchange = () => fn(s.value); return s; };
+  const btn = (t, fn) => { const b = document.createElement('button'); b.textContent = t; b.onclick = fn; el.appendChild(b); };
+  add('Label field', sel([['', '(none)'], ...fields.map(f => [f, f])], l.labels.field || '', v => LM.setLabels(l.id, { field: v || null })));
+  const sz = add('Size (px)', document.createElement('input')); sz.type = 'number'; sz.min = 6; sz.max = 40; sz.value = l.labels.size; sz.onchange = () => LM.setLabels(l.id, { size: Math.min(40, Math.max(6, +sz.value || 12)) });
+  const co = add('Colour', document.createElement('input')); co.type = 'color'; co.value = l.labels.color; co.oninput = () => LM.setLabels(l.id, { color: co.value });
+  const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Labels are drawn for up to 500 visible features per layer.'; el.appendChild(p);
+  if (!labForm.field || !fields.includes(labForm.field)) labForm.field = fields[0] || '';
+  const h = document.createElement('h4'); h.textContent = 'Display filter'; el.appendChild(h);
+  (l.filter?.conds || []).forEach((c, i) => { const row = document.createElement('div'); row.textContent = `${i ? l.filter.join + ' ' : ''}${c.field} ${c.op} ${c.value} `; const x = document.createElement('button'); x.textContent = '✕';
+    x.onclick = () => { const conds = l.filter.conds.filter((_, k) => k !== i); LM.setFilter(l.id, conds.length ? { join: l.filter.join, conds } : null); }; row.appendChild(x); el.appendChild(row); });
+  if ((l.filter?.conds.length || 0) > 1) add('Combine with', sel([['AND', 'AND (all)'], ['OR', 'OR (any)']], l.filter.join, v => LM.setFilter(l.id, { ...l.filter, join: v })));
+  add('Field', sel(fields.map(f => [f, f]), labForm.field, v => labForm.field = v)); add('Test', sel(['=', '!=', '<', '<=', '>', '>=', 'contains'].map(x => [x, x]), labForm.op, v => labForm.op = v));
+  const va = add('Value', document.createElement('input')); va.value = labForm.value; va.onchange = () => labForm.value = va.value;
+  btn('Add condition', () => { const r = filterIndices(l.geojson.features, labForm.field, labForm.op, va.value); if (r.error) return msg(r.error, true); const cur = l.filter || { join: 'AND', conds: [] };
+    LM.setFilter(l.id, { join: cur.join, conds: [...cur.conds, { field: labForm.field, op: labForm.op, value: va.value }] }); msg(`Filter shows ${filterMulti(l.geojson.features, l.filter).indices.length} of ${l.geojson.features.length} features (the attribute table still lists all)`); });
+  btn('Clear filter', () => { LM.setFilter(l.id, null); msg('Filter cleared'); }); }
+bus.on('layers', renderLab); renderLab();
+const collapsedGroups = new Set();
+function groupRow(name) { const li = document.createElement('li'); li.className = 'group'; const cb = document.createElement('input'), t = document.createElement('span'), m = LM.layers.filter(l => l.group === name);
+  cb.type = 'checkbox'; cb.checked = m.every(l => l.visible); cb.onchange = () => LM.setGroupVisible(name, cb.checked);
+  t.className = 'name'; t.textContent = `${collapsedGroups.has(name) ? '▸' : '▾'} ${name} (${m.length})`; t.onclick = () => { collapsedGroups.has(name) ? collapsedGroups.delete(name) : collapsedGroups.add(name); renderTree(); }; li.append(cb, t); return li; }

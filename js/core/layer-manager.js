@@ -1,11 +1,12 @@
 import { bus } from './event-bus.js';
+import { cleanFilter } from '../layers/labels.js';
 let nextId = 1; export let activeId = null;
 export const layers = []; // index 0 = top
 const L = id => layers.find(l => l.id === id), emit = () => bus.emit('layers');
 export const getActive = () => L(activeId);
 export function addLayer(name, geojson) {
-  const l = { id: nextId++, name, geojson, visible: true, crs: 'EPSG:4326', selected: new Set(),
-    style: { mode: 'single', color: '#1565c0', width: 2, opacity: 1, field: null, cats: {}, edges: [], n: 4 } };
+  const l = { id: nextId++, name, geojson, visible: true, crs: 'EPSG:4326', selected: new Set(), group: null, labels: { field: null, size: 12, color: '#000000' }, filter: null,
+    style: { mode: 'single', color: '#1565c0', width: 2, radius: 5, method: 'equal', opacity: 1, field: null, cats: {}, edges: [], n: 4 } };
   layers.unshift(l); activeId = l.id; emit(); return l;
 }
 export const removeLayer = id => { const i = layers.findIndex(l => l.id === id); if (i >= 0) layers.splice(i, 1);
@@ -24,3 +25,17 @@ export const setSelection = (id, idxs) => { layers.forEach(l => l.selected.clear
 export const clearSelection = () => { layers.forEach(l => l.selected.clear()); emit(); };
 export const editCell = (id, i, field, v) => { L(id).geojson.features[i].properties[field] = v; emit(); };
 export const selectedCount = () => layers.reduce((n, l) => n + l.selected.size, 0);
+export function duplicateLayer(id) { const l = L(id), c = addLayer(l.name + ' copy', structuredClone(l.geojson)); c.style = structuredClone(l.style); c.labels = { ...l.labels }; c.filter = l.filter ? { ...l.filter } : null;
+  c.sourceCrs = l.sourceCrs; c.fileName = l.fileName; if (l.civil) c.civil = structuredClone(l.civil); emit(); return c; }
+/** type 'text' fills '' (typed as text); 'number' fills null. Returns an error string or null. */
+export function addField(id, name, type) { const l = L(id); name = String(name).trim(); if (!name) return 'Field name required';
+  if (l.geojson.features.some(f => name in f.properties)) return `Field ${name} already exists`; l.geojson.features.forEach(f => { f.properties[name] = type === 'text' ? '' : null; }); emit(); return null; }
+export function deleteField(id, name) { const l = L(id); l.geojson.features.forEach(f => { delete f.properties[name]; });
+  if (l.style.field === name) { l.style.field = null; l.style.mode = 'single'; } if (l.labels.field === name) l.labels.field = null; if (l.filter) { const conds = l.filter.conds.filter(c => c.field !== name); l.filter = conds.length ? { ...l.filter, conds } : null; }
+  if (l.civil) for (const k in l.civil.map) if (l.civil.map[k] === name) delete l.civil.map[k]; emit(); }
+export const setLabels = (id, o) => { Object.assign(L(id).labels, o); emit(); };
+export const setFilter = (id, f) => { L(id).filter = cleanFilter(f); emit(); };
+/** Moves the layer next to the existing members of the group so a group stays contiguous in the layer order. Empty name removes the group. */
+export function setGroup(id, name) { const l = L(id); name = String(name || '').trim().slice(0, 60); l.group = name || null;
+  if (name) { const j = layers.findIndex(x => x.id !== id && x.group === name); if (j >= 0) { layers.splice(layers.indexOf(l), 1); const k = layers.map(x => x.group).lastIndexOf(name); layers.splice(k + 1, 0, l); } } emit(); }
+export const setGroupVisible = (name, v) => { layers.forEach(l => { if (l.group === name) l.visible = v; }); emit(); };
