@@ -13,7 +13,10 @@ Run everything: `node tests/run-all.mjs` (Node 22). Each file is standalone.
 | m9 | duplicate layer, add/delete fields, labels, display filter, project round trip |
 | m10 | multi-condition filter, groups, point size, saved project fields |
 | m11 | quantile and Jenks classes, class lookup, large-array safety |
-| static | relative imports, named exports, element ids, no root-absolute paths |
+| panels | panel show/hide state logic and saved state |
+| edit | drawing geometry, vertex move/remove, undo/redo, new layers, saved empty layers |
+| snap | snapping to vertices/edges, midpoint handles, vertex insertion |
+| static | relative imports, calls to functions that were never imported, named exports, element ids, no root-absolute paths |
 Not covered (needs a browser): rendering, map interaction, file downloads, printing, Web Worker, console errors. Check these manually.
 
 ## Browser smoke test

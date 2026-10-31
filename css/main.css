@@ -28,3 +28,8 @@ aside{width:240px;padding:8px;overflow:auto;background:#f4f6f8}
 #left details input{display:block;width:100%;margin:4px 0}
 .evlab-label{background:none;border:none;box-shadow:none;padding:0;font-weight:600;text-shadow:0 0 3px #fff}.leaflet-tooltip.evlab-label::before{display:none}
 #layer-tree li.group{background:#cfd8e3;font-weight:600}#lab h4{margin:8px 0 2px}
+.tg{display:inline-flex;gap:2px;margin-right:10px}.tg button.on{background:#ffd54f}
+body.hide-left #left,body.hide-right #right,body.hide-table #table-panel{display:none}
+#right h3.fold{cursor:pointer;user-select:none}#right h3.fold::before{content:"▾ "}#right h3.fold.collapsed::before{content:"▸ "}
+.vtx{background:#fff;border:2px solid #d500f9;border-radius:2px;box-sizing:border-box}
+.vtx.mid{opacity:.55;border-style:dashed;border-radius:50%}

@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { bus } from './core/event-bus.js';
 import * as CRS from './core/crs-manager.js';
-import { validateLayer } from './analysis/geometry-validation.js';
+import { validateLayer, validateGeometry } from './analysis/geometry-validation.js';
 import { bufferLayer } from './analysis/buffer.js';
 import { intersectLayers, differenceLayers, unionLayers } from './analysis/overlay.js';
 import { dissolveLayer } from './analysis/dissolve.js';
@@ -22,6 +22,13 @@ import { sample, profile } from './raster/terrain.js';
 import { parseKML } from './data/kml-import.js';
 import { parseGPX } from './data/gpx-import.js';
 import * as BM from './map/basemap-manager.js';
+import { initPanels } from './ui/panels.js';
+import * as H from './edit/history.js';
+import * as DIG from './edit/digitize.js';
+import * as VE from './edit/vertex-editor.js';
+import { buildGeometry, newFeature, vertices, setVertex, removeVertex, midpoints, insertVertex, addFeatureCmd, deleteCmd, geomCmd } from './edit/edit-ops.js';
+import { snapPosition } from './edit/snap.js';
+import { parseFieldSpec, drawTypeOf, GEOM_TYPES } from './layers/schema.js';
 import * as MEAS from './map/measurements.js';
 import * as LM from './core/layer-manager.js';
 import { parseGeoJSON } from './data/geojson-import.js';
@@ -71,7 +78,7 @@ const hooks = { msg, zoomSel: MC.zoomToSelected, download: (name, text) => { con
 bus.on('layers', () => { renderTree(); MC.redraw(); renderSym(); renderTable($('table-panel'), LM.getActive(), hooks); $('s-sel').textContent = `Selected: ${LM.selectedCount()}`; });
 $('btn-add').onclick = () => $('file-input').click();
 $('btn-zoom-all').onclick = MC.zoomToAll;
-$('btn-new').onclick = () => { if (confirm('Remove all layers?')) { LM.clear(); project.name = 'Untitled project'; msg('New project'); } };
+$('btn-new').onclick = () => { if (confirm('Remove all layers?')) { LM.clear(); H.clear(); project.name = 'Untitled project'; msg('New project'); } };
 $('basemap-toggle').onchange = e => { MC.setBasemap(e.target.checked); msg(e.target.checked ? 'Basemap needs internet; follow the tile provider usage policy' : 'Basemap off'); };
 $('file-input').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
@@ -177,8 +184,8 @@ $('proj-input').onchange = async e => { const f = e.target.files[0]; e.target.va
   if (LM.layers.length && !confirm('Replace the current project?')) return; const p = r.project, w = [...r.warnings];
   for (const [c, d] of Object.entries(p.crsDefinitions)) { try { CRS.register(c, d); w.push(`${c} restored from the project's own definition (unverified)`); } catch { w.push(`CRS ${c}: invalid definition`); } }
   if (!CRS.info(p.projectCrs)) { w.push(`Project CRS ${p.projectCrs} unknown; using EPSG:4326`); p.projectCrs = 'EPSG:4326'; }
-  p.rasters.forEach(x => w.push(`Raster "${x.name}" (${x.fileName || 'unknown file'}) is not embedded; add it again`)); LM.clear(); project.name = p.name; CRS.projectCrs.code = p.projectCrs; $('s-crs').textContent = `Project CRS: ${p.projectCrs}`;
-  [...p.layers].reverse().forEach(d => { const l = LM.addLayer(d.name, d.geojson); Object.assign(l, { visible: d.visible, sourceCrs: d.sourceCrs, fileName: d.fileName, civil: d.civil, labels: d.labels, filter: d.filter, group: d.group }); Object.assign(l.style, d.style); });
+  p.rasters.forEach(x => w.push(`Raster "${x.name}" (${x.fileName || 'unknown file'}) is not embedded; add it again`)); LM.clear(); H.clear(); project.name = p.name; CRS.projectCrs.code = p.projectCrs; $('s-crs').textContent = `Project CRS: ${p.projectCrs}`;
+  [...p.layers].reverse().forEach(d => { const l = LM.addLayer(d.name, d.geojson); Object.assign(l, { visible: d.visible, sourceCrs: d.sourceCrs, fileName: d.fileName, schema: d.schema, geomType: d.geomType, civil: d.civil, labels: d.labels, filter: d.filter, group: d.group }); Object.assign(l.style, d.style); });
   if (LM.layers.length) LM.setActive(LM.layers[0].id); renderCrs(); p.map ? MC.setView(p.map) : MC.zoomToAll();
   msg(`Opened "${p.name}": ${p.layers.length} layers` + (w.length ? `; ${w.length} warnings (first: ${w[0]})` : ''), w.length > 0); };
 $('exp').onchange = e => { const v = e.target.value; e.target.value = ''; const l = LM.getActive(); if (v !== 'png' && !l) return msg('No active layer', true);
@@ -279,3 +286,32 @@ const collapsedGroups = new Set();
 function groupRow(name) { const li = document.createElement('li'); li.className = 'group'; const cb = document.createElement('input'), t = document.createElement('span'), m = LM.layers.filter(l => l.group === name);
   cb.type = 'checkbox'; cb.checked = m.every(l => l.visible); cb.onchange = () => LM.setGroupVisible(name, cb.checked);
   t.className = 'name'; t.textContent = `${collapsedGroups.has(name) ? '▸' : '▾'} ${name} (${m.length})`; t.onclick = () => { collapsedGroups.has(name) ? collapsedGroups.delete(name) : collapsedGroups.add(name); renderTree(); }; li.append(cb, t); return li; }
+initPanels(MC.invalidateSize);
+let editLayerId = null, vertexMode = false, snapOn = true, snapNote = '';
+/** Snaps to vertices/edges of visible layers within 10 px. `skip` = [layerId, featureIndex] to ignore (the feature being edited). */
+function snapFn(skip) { return pos => { snapNote = ''; if (!snapOn) return pos; const geoms = (function* () { for (const l of LM.layers) if (l.visible) for (let i = 0; i < l.geojson.features.length; i++) if (!(skip && skip[0] === l.id && skip[1] === i)) yield l.geojson.features[i].geometry; })();
+  const r = snapPosition(pos, geoms, MC.snapTolerance(pos, 10)); if (r.kind) snapNote = ` (snapped to ${r.kind})`; return r.pos; }; }
+const errorsOf = g => validateGeometry(g).filter(x => x.level === 'error');
+function renderEdit() {
+  const el = $('edit'); el.textContent = ''; const l = LM.getActive(); if (editLayerId && !LM.layers.some(x => x.id === editLayerId)) editLayerId = null;
+  const btn = (t, fn, off) => { const b = document.createElement('button'); b.textContent = t; b.onclick = fn; b.disabled = !!off; el.appendChild(b); };
+  btn('New layer', () => { const name = prompt('Layer name'); if (!name) return; const t = { point: 'Point', line: 'LineString', polygon: 'Polygon' }[(prompt('Geometry type: point, line or polygon', 'point') || '').trim().toLowerCase()];
+    if (!t) return msg('Geometry type must be point, line or polygon', true); let schema; try { schema = parseFieldSpec(prompt('Fields, e.g. asset_id, diameter:number, material (text is the default; empty for none)', 'asset_id') || ''); } catch (e) { return msg(e.message, true); }
+    const nl = LM.createLayer(name, t, schema); editLayerId = nl.id; msg(`Layer "${name}" created and editing started. Use Add feature to digitize.`); });
+  if (!l) return; const on = editLayerId === l.id, t = drawTypeOf(l);
+  btn(on ? 'Stop editing' : 'Start editing', () => { editLayerId = on ? null : l.id; if (on) { DIG.stop(); vertexMode = false; } renderEdit(); syncVertices(); msg(on ? 'Editing stopped' : `Editing "${l.name}": changes are in memory until you save the project; undo is available`); });
+  btn(snapOn ? 'Snap: on' : 'Snap: off', () => { snapOn = !snapOn; renderEdit(); msg(snapOn ? 'Snapping on: clicks and dragged vertices snap to vertices and edges within 10 px' : 'Snapping off'); });
+  btn('Add feature', () => { if (!t) return msg('This layer has mixed geometry types; create a new layer to digitize', true); MEAS.stop(); DIG.start(t, pts => { try { const f = newFeature(l, buildGeometry(t, pts)); H.run(addFeatureCmd(l.id, f)); LM.select(l.id, l.geojson.features.length - 1, false); msg('Feature added. Fill its attributes in the table (double-click a cell).'); } catch (e) { msg(e.message, true); } }, msg, snapFn()); }, !on);
+  btn(vertexMode ? 'Vertices: on' : 'Edit vertices', () => { vertexMode = !vertexMode; syncVertices(); renderEdit(); msg(vertexMode ? 'Select one feature: drag a handle to move a vertex, double-click to remove it' : 'Vertex editing off'); }, !on);
+  btn('Delete selected', () => { const ix = [...l.selected]; if (!ix.length) return msg('Select features first', true); H.run(deleteCmd(l.id, ix)); msg(`Deleted ${ix.length} feature(s). Undo restores them.`); }, !on);
+  btn('Undo', () => { const r = H.undoLast(); msg(r ? `Undone: ${r}` : 'Nothing to undo', !r); }, !H.canUndo()); btn('Redo', () => { const r = H.redoLast(); msg(r ? `Redone: ${r}` : 'Nothing to redo', !r); }, !H.canRedo());
+  const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Attribute edits in the table are not part of undo. Coordinates are WGS84.'; el.appendChild(p); }
+function syncVertices() { VE.clear(); const l = LM.getActive(); if (!vertexMode || !l || l.id !== editLayerId || l.selected.size !== 1) return;
+  const i = [...l.selected][0], g = l.geojson.features[i]?.geometry, v = g ? vertices(g) : []; if (v.length > 500) return msg('Too many vertices to edit (limit 500)', true);
+  const snap = snapFn([l.id, i]);
+  VE.show(v, (vi, pos) => { const sp = snap(pos), ng = setVertex(g, vi, sp), bad = errorsOf(ng); H.run(geomCmd(l.id, i, ng, 'Move vertex')); msg((bad.length ? `Vertex moved; geometry now has an issue: ${bad[0].msg}` : 'Vertex moved') + snapNote, bad.length > 0); },
+    vi => { try { H.run(geomCmd(l.id, i, removeVertex(g, vi), 'Remove vertex')); msg('Vertex removed'); } catch (e) { msg(e.message, true); } },
+    midpoints(g), (after, pos) => { const sp = snap(pos); H.run(geomCmd(l.id, i, insertVertex(g, after, sp), 'Insert vertex')); msg('Vertex inserted' + snapNote); }); }
+bus.on('layers', () => { renderEdit(); syncVertices(); }); renderEdit();
+document.addEventListener('keydown', e => { if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || !editLayerId) return;
+  e.preventDefault(); const r = e.shiftKey ? H.redoLast() : H.undoLast(); msg(r ? `${e.shiftKey ? 'Redone' : 'Undone'}: ${r}` : 'Nothing to ' + (e.shiftKey ? 'redo' : 'undo'), !r); });

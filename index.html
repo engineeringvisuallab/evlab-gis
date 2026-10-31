@@ -7,6 +7,7 @@
 </head><body>
 <header id="toolbar">
   <strong class="brand">EVLab GIS</strong>
+  <span class="tg"><button id="tg-left" class="on" title="Show/hide layers panel">Layers</button><button id="tg-right" class="on" title="Show/hide properties panel">Properties</button><button id="tg-table" class="on" title="Show/hide attribute table">Table</button><button id="tg-full" title="Hide or restore all panels">Map only</button></span>
   <button id="btn-new">New</button>
   <button id="btn-add">Add data</button>
   <button id="btn-zoom-all">Zoom to extent</button>
@@ -25,7 +26,7 @@
     <details class="basemap"><summary>Custom XYZ basemap</summary><input id="xyz-url" placeholder="https://tiles.example.com/{z}/{x}/{y}.png"><input id="xyz-attr" placeholder="Attribution (required)"><button id="xyz-apply">Apply</button><button id="xyz-clear">Remove</button>
       <p class="muted">You are responsible for the provider's terms, rate limits and API keys. Not saved in project files.</p></details></aside>
   <div id="map"><div id="print-title"></div><div id="print-legend"></div><div id="north" title="North">N<span>▲</span></div></div>
-  <aside id="right"><h3>Symbology</h3><div id="sym"></div><h3>Coordinate systems</h3><div id="crs"></div><h3>Labels and filter</h3><div id="lab"></div><h3>Analysis</h3><div id="ana"></div><h3>Civil Engineering</h3><div id="civil"></div><h3>Raster / terrain</h3><div id="rast"></div></aside>
+  <aside id="right"><h3>Symbology</h3><div id="sym"></div><h3>Coordinate systems</h3><div id="crs"></div><h3>Labels and filter</h3><div id="lab"></div><h3>Analysis</h3><div id="ana"></div><h3>Civil Engineering</h3><div id="civil"></div><h3>Edit</h3><div id="edit"></div><h3>Raster / terrain</h3><div id="rast"></div></aside>
 </main>
 <section id="table-panel"></section>
 <footer id="status">

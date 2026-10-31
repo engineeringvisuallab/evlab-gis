@@ -22,7 +22,7 @@ try:
         if not REAL:
             ctx.route('**/unpkg.com/**', lambda r: r.fulfill(status=200, content_type='text/css' if r.request.url.endswith('.css') else 'application/javascript', body='' if r.request.url.endswith('.css') else STUB))
         saved = {}
-        def dlg(d): d.accept('Smoke project' if 'Project name' in d.message else 'Network' if 'Group name' in d.message else (d.default_value or '')) if d.type == 'prompt' else d.accept()
+        def dlg(d): d.accept('Smoke project' if 'Project name' in d.message else 'Network' if 'Group name' in d.message else 'Assets' if d.message == 'Layer name' else 'point' if 'Geometry type' in d.message else 'asset_id, dia:number' if d.message.startswith('Fields') else (d.default_value or '')) if d.type == 'prompt' else d.accept()
         page.on('dialog', dlg)
         page.goto(f'http://localhost:{PORT}/index.html'); page.wait_for_timeout(500)
         txt = lambda sel: page.inner_text(sel)
@@ -60,6 +60,23 @@ try:
         page.locator('#ana select').first.select_option('attr'); page.wait_for_timeout(100)
         check('analysis panel re-renders', page.locator('#ana select').count() >= 2)
         page.select_option('#pc', 'EPSG:32646'); check('project CRS switch', '32646' in txt('#s-crs'))
+        rows = lambda: page.locator('#table-panel tr').count()
+        page.get_by_role('button', name='New layer').click(); page.wait_for_function('[...document.querySelectorAll("#layer-tree .name")].some(n => n.textContent.startsWith("Assets"))')
+        check('new layer created, editing on', 'created' in txt('#s-msg') and 'asset_id' in txt('#table-panel'), txt('#s-msg'))
+        page.evaluate("""async () => { const LM = await import('/js/core/layer-manager.js'), E = await import('/js/edit/edit-ops.js'), H = await import('/js/edit/history.js'); const l = LM.getActive();
+          [[90.4, 23.8], [90.5, 23.9]].forEach(p => H.run(E.addFeatureCmd(l.id, E.newFeature(l, E.buildGeometry('Point', [p]))))); }""")
+        check('two features added', rows() == 3, str(rows()))
+        page.locator('#table-panel tr').nth(1).click(); page.get_by_role('button', name='Delete selected').click(); check('delete selected', rows() == 2, str(rows()))
+        page.get_by_role('button', name='Undo', exact=True).click(); check('undo restores', rows() == 3, str(rows()))
+        page.locator('body').click(position={'x': 5, 'y': 5}); page.keyboard.press('Control+z'); check('Ctrl+Z undoes last add', rows() == 2, str(rows()))
+        page.get_by_role('button', name='Snap: on').click(); check('snap toggles off', page.get_by_role('button', name='Snap: off').count() == 1 and 'Snapping off' in txt('#s-msg'), txt('#s-msg')); page.get_by_role('button', name='Snap: off').click()
+        page.get_by_role('button', name='Stop editing').click(); check('editing stops', page.get_by_role('button', name='Add feature').is_disabled())
+        vis = lambda sel: page.locator(sel).is_visible()
+        page.click('#tg-left'); check('hide layers panel', not vis('#left') and vis('#right')); page.click('#tg-left'); check('show layers panel', vis('#left'))
+        page.click('#tg-table'); check('hide table', not vis('#table-panel')); page.click('#tg-table')
+        page.click('#tg-full'); check('map only hides all panels', not vis('#left') and not vis('#right') and not vis('#table-panel') and vis('#map')); page.click('#tg-full'); check('map only restores', vis('#left') and vis('#right') and vis('#table-panel'))
+        page.locator('#right h3').first.click(); check('section collapses', not vis('#sym')); page.locator('#right h3').first.click(); check('section expands', vis('#sym'))
+        page.click('#tg-right'); page.reload(); page.wait_for_timeout(400); check('panel state survives reload', not vis('#right') and vis('#left')); page.click('#tg-right')
         page.wait_for_timeout(300); b.close()
 finally:
     srv.terminate()

@@ -13,4 +13,10 @@ const html = rd(path.join(root, 'index.html')), app = rd(path.join(root, 'js/app
 for (const m of html.matchAll(/(?:src|href)="([^"]+)"/g)) { const u = m[1]; if (/^https?:\/\//.test(u)) continue; if (u.startsWith('/')) errs.push(`index.html: root-absolute path ${u}`); else if (!fs.existsSync(path.join(root, u))) errs.push(`index.html: missing ${u}`); }
 for (const f of [...files, ...walk(path.join(root, 'css'))]) if (/(?:from\s+|import\s+|src=|url\()\s*['"]?\/(?!\/)/.test(rd(f))) errs.push(`${path.relative(root, f)}: root-absolute path`);
 for (const m of app.matchAll(/\$\('([\w-]+)'\)/g)) if (!html.includes(`id="${m[1]}"`) && !app.includes(`id="${m[1]}"`)) errs.push(`app.js: element #${m[1]} not found in index.html`);
+// Heuristic: a function exported by another module is called here but never imported or declared locally (syntax checks cannot see this).
+const allExports = new Set(Object.values(exp).flatMap(x => [...x]));
+for (const f of files) { const t = rd(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '').replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, "''"), imported = new Set();
+  for (const m of t.matchAll(/import\s*\{([^}]*)\}/g)) m[1].split(',').forEach(x => imported.add(x.trim().split(/\s+as\s+/).pop())); for (const m of t.matchAll(/import\s*\*\s*as\s+([\w$]+)/g)) imported.add(m[1]);
+  const declared = n => new RegExp(`(?:function\\*?\\s+${n.replace(/\$/g, '\\$')}\\b|(?:const|let|var|class)\\s+${n.replace(/\$/g, '\\$')}\\b|[\\s,]${n.replace(/\$/g, '\\$')}\\s*=(?!=)|[(,]\\s*${n.replace(/\$/g, '\\$')}\\s*[,)]\\s*(?:=>|\\{))`).test(t);
+  const seen = new Set(); for (const m of t.matchAll(/(?<![.\w$'"`])([A-Za-z_$][\w$]*)\s*\(/g)) { const n = m[1]; if (seen.has(n) || !allExports.has(n) || imported.has(n)) continue; seen.add(n); if (!declared(n)) errs.push(`${path.relative(root, f)}: calls ${n}() which is exported elsewhere but not imported`); } }
 assert.deepEqual(errs, [], errs.join('\n')); console.log(`static: ${files.length} modules checked, imports/exports/ids/paths OK`);

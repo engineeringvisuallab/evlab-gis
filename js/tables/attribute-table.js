@@ -1,10 +1,10 @@
 import * as LM from '../core/layer-manager.js';
-import { fieldTypes } from '../layers/styling.js';
+import { fieldsOf } from '../layers/schema.js';
 import { toCSV } from '../io/csv-export.js';
 const st = { search: '', sort: null, dir: 1 }, MAX = 500;
 export function renderTable(el, l, hooks) {
   el.innerHTML = ''; if (!l) { el.textContent = 'No active layer'; return; }
-  const types = fieldTypes(l.geojson.features), fields = Object.keys(types), feats = l.geojson.features;
+  const types = fieldsOf(l), fields = Object.keys(types), feats = l.geojson.features;
   let idx = feats.map((_, i) => i);
   if (st.search) idx = idx.filter(i => fields.some(f => String(feats[i].properties[f] ?? '').toLowerCase().includes(st.search.toLowerCase())));
   if (st.sort) idx.sort((a, b) => { const x = feats[a].properties[st.sort], y = feats[b].properties[st.sort];
